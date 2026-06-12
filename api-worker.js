@@ -23,7 +23,6 @@ export default {
     else if (p === '/api/plisio/webhook' && request.method === 'POST') res = await webhook(request, env);
     else if (p === '/api/activate'   && request.method === 'POST') res = await activate(request, env);
     else if (p === '/api/validate'   && request.method === 'POST') res = await validate(request, env);
-    else if (p === '/api/deactivate' && request.method === 'POST') res = await deactivate(request, env);
     else if (p === '/admin/reset'    && request.method === 'POST') res = await adminReset(request, env);
     else if (p === '/api/test' && request.method === 'GET') res = await createTestOrder(env);
     else res = new Response('Not found', { status: 404 });
@@ -234,28 +233,6 @@ async function validate(request, env) {
   const devices = Array.isArray(data.devices) ? data.devices : [];
   const registered = devices.some(d => typeof d === 'string' ? d === device : d && d.id === device);
   return json({ valid: registered });
-}
-
-/* ============================================================
-   POST /api/deactivate  { license, device }
-   Плагин вызывает если юзер хочет перенести на другой ПК.
-   ============================================================ */
-async function deactivate(request, env) {
-  const { license, device } = await request.json().catch(() => ({}));
-  if (!license || !device) return json({ success: false }, 400);
-
-  const key = license.trim().toUpperCase();
-  const raw = await env.KV.get(`license:${key}`);
-  if (!raw) return json({ success: false, error: 'Not found' });
-
-  const data  = normalizeLicenseData(JSON.parse(raw), key);
-  const idx   = data.devices.findIndex(d => d.id === device);
-  if (idx === -1) return json({ success: false, error: 'Device not found' });
-
-  data.devices.splice(idx, 1);
-  await env.KV.put(`license:${key}`, JSON.stringify(data));
-
-  return json({ success: true });
 }
 
 /* ============================================================
