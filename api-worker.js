@@ -23,9 +23,7 @@ export default {
     else if (p === '/api/plisio/webhook' && request.method === 'POST') res = await webhook(request, env);
     else if (p === '/api/activate'   && request.method === 'POST') res = await activate(request, env);
     else if (p === '/api/validate'   && request.method === 'POST') res = await validate(request, env);
-    else if (p === '/api/deactivate' && request.method === 'POST') res = await deactivate(request, env);
     else if (p === '/admin/reset'    && request.method === 'POST') res = await adminReset(request, env);
-    else if (p === '/api/test' && request.method === 'GET') res = await createTestOrder(env);
     else res = new Response('Not found', { status: 404 });
 
     // Добавляем CORS ко всем ответам
@@ -142,6 +140,20 @@ async function webhook(request, env) {
   const orderNumber = String(body.order_number || '');
   if (!orderNumber) return json({ error: 'No order_number' }, 400);
 
+  const existingOrderRaw = await env.KV.get(`order:${orderNumber}`);
+  if (!existingOrderRaw) return json({ error: 'Order not found' }, 404);
+
+  let existingOrder;
+  try { existingOrder = JSON.parse(existingOrderRaw); } catch { return json({ error: 'Invalid order record' }, 500); }
+
+  if (existingOrder.status === 'paid') {
+    return json({ ok: true, duplicate: true });
+  }
+
+  if (existingOrder.status !== 'pending') {
+    return json({ error: 'Order is not pending', status: existingOrder.status || 'unknown' }, 409);
+  }
+
   // Генерируем лицензионный ключ
   const licenseKey    = generateLicenseKey();
   const downloadToken = generateToken();
@@ -251,12 +263,18 @@ async function deactivate(request, env) {
 }
 
 /* ============================================================
-   POST /admin/reset  { token, license }
+   POST /admin/reset
+   Authorization: Bearer ADMIN_TOKEN
+   { license }
    Ты вызываешь вручную если покупатель сменил ПК.
    ============================================================ */
 async function adminReset(request, env) {
-  const { token, license } = await request.json().catch(() => ({}));
-  if (!env.ADMIN_TOKEN || token !== env.ADMIN_TOKEN) return json({ ok: false, error: 'Unauthorized' }, 401);
+  const auth = request.headers.get('Authorization') || '';
+  if (!env.ADMIN_TOKEN || auth !== `Bearer ${env.ADMIN_TOKEN}`) {
+    return json({ ok: false, error: 'Unauthorized' }, 401);
+  }
+
+  const { license } = await request.json().catch(() => ({}));
 
   const key = String(license || '').trim().toUpperCase();
   const raw = await env.KV.get(`license:${key}`);
@@ -293,6 +311,33 @@ function generateLicenseKey() {
     return s;
   }
   return `ILBL-${seg()}-${seg()}-${seg()}`;
+}
+
+function normalizeLicenseData(data, licenseKey) {
+  const normalized = {
+    ...data,
+    license: data.license || licenseKey,
+    status: data.status || 'active',
+    devices: Array.isArray(data.devices) ? data.devices : [],
+  };
+
+  normalized.devices = normalized.devices
+    .map(device => {
+      if (typeof device === 'string') return { id: device, activatedAt: null };
+      if (device && typeof device === 'object' && device.id) {
+        return {
+          ...device,
+          activatedAt: device.activatedAt ?? null,
+        };
+      }
+      return null;
+    })
+    .filter(Boolean);
+
+  delete normalized.activations;
+  delete normalized.maxActivations;
+
+  return normalized;
 }
 
 async function verifyPlisio(body, secret) {
