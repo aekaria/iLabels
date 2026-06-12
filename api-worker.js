@@ -24,7 +24,6 @@ export default {
     else if (p === '/api/activate'   && request.method === 'POST') res = await activate(request, env);
     else if (p === '/api/validate'   && request.method === 'POST') res = await validate(request, env);
     else if (p === '/admin/reset'    && request.method === 'POST') res = await adminReset(request, env);
-    else if (p === '/api/test' && request.method === 'GET') res = await createTestOrder(env);
     else res = new Response('Not found', { status: 404 });
 
     // Добавляем CORS ко всем ответам
@@ -320,35 +319,6 @@ async function verifyPlisio(body, secret) {
 
 function mapStatus(s) {
   return ['completed', 'success', 'paid'].includes(String(s || '').toLowerCase()) ? 'paid' : 'other';
-}
-
-
-async function createTestOrder(env) {
-  const orderId = 'test-' + Date.now();
-  const licenseKey = 'ILBL-TEST-AAAA-BBBB';
-
-  // Создаём саму лицензию (если ещё нет)
-  const existing = await env.KV.get(`license:${licenseKey}`);
-  if (!existing) {
-    await env.KV.put(`license:${licenseKey}`, JSON.stringify({
-      status: 'active',
-      activations: 0,
-      maxActivations: 2,
-      devices: [],
-      createdAt: Date.now(),
-      status: 'active',
-      orderNumber: orderId,
-    }));
-  }
-
-  await env.KV.put(`order:${orderId}`, JSON.stringify({
-    status: 'paid',
-    licenseKey,
-    downloadToken: 'testtoken123',
-    createdAt: new Date().toISOString()
-  }), { expirationTtl: 3600 });
-
-  return Response.redirect(`https://ilabels.iosflowzy.workers.dev/success.html?order=${orderId}`, 302);
 }
 
 
