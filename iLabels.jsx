@@ -115,6 +115,14 @@
         file.close();
     }
 
+    function writeAsciiFileText(path, content) {
+        var file = new File(path);
+        file.encoding = "ASCII";
+        file.open("w");
+        file.write(content);
+        file.close();
+    }
+
     function appendLog(log, title, details) {
         return log + "\r\n--- " + title + " ---\r\n" + String(details || "") + "\r\n";
     }
@@ -126,6 +134,16 @@
 
     function commandSucceeded(log) {
         return String(log || "").indexOf("EXIT_CODE=0") >= 0;
+    }
+
+    function cmdEscape(str) {
+        return String(str)
+            .replace(/%/g, "%%")
+            .replace(/\^/g, "^^")
+            .replace(/&/g, "^&")
+            .replace(/\|/g, "^|")
+            .replace(/</g, "^<")
+            .replace(/>/g, "^>");
     }
 
     function looksLikeHttpPayload(content) {
@@ -154,7 +172,7 @@
         removeFileIfExists(runnerPath);
         removeFileIfExists(debugPath);
 
-        var directCurlCmd = "cmd.exe /d /s /c \"curl.exe -sS -L --max-time 15 " + jsQuote(url) + " 2>&1\"";
+        var directCurlCmd = "cmd.exe /d /s /c \"curl.exe -sS -L --max-time 15 " + cmdEscape(url) + " 2>&1\"";
         var directCurlOutput = system.callSystem(directCurlCmd);
         if (looksLikeHttpPayload(directCurlOutput)) {
             return directCurlOutput;
@@ -166,7 +184,7 @@
             + "curl.exe -sS -L --max-time 15 \"" + url + "\" > \"" + outPath + "\" 2> \"" + runnerPath + "\"\r\n"
             + "echo EXIT_CODE=%ERRORLEVEL%>>\"" + runnerPath + "\"\r\n";
 
-        writeFileText(cmdPath, curlCmd);
+        writeAsciiFileText(cmdPath, curlCmd);
         var curlOutput = system.callSystem("cmd.exe /c \"" + cmdPath + "\"");
         var curlRunnerLog = readFileText(runnerPath);
         var content = waitForFileText(outPath, 4, 250);
@@ -199,7 +217,7 @@
             + "echo EXIT_CODE=%ERRORLEVEL%>>\"" + runnerPath + "\"\r\n";
 
         writeFileText(psPath, ps);
-        writeFileText(cmdPath, psCmd);
+        writeAsciiFileText(cmdPath, psCmd);
         var psOutput = system.callSystem("cmd.exe /c \"" + cmdPath + "\"");
         var psRunnerLog = readFileText(runnerPath);
         content = waitForFileText(outPath, 4, 250);
@@ -236,7 +254,7 @@
             + "echo EXIT_CODE=%ERRORLEVEL%>>\"" + runnerPath + "\"\r\n";
 
         writeFileText(jsPath, js);
-        writeFileText(cmdPath, wshCmd);
+        writeAsciiFileText(cmdPath, wshCmd);
         var wshOutput = system.callSystem("cmd.exe /c \"" + cmdPath + "\"");
         var wshRunnerLog = readFileText(runnerPath);
         content = waitForFileText(outPath, 30, 500);
