@@ -404,17 +404,25 @@ function normalizeLicenseData(data, licenseKey) {
 }
 
 function parseJsonRecord(raw) {
+  const text = normalizeKvText(raw);
   try {
-    return { ok: true, value: JSON.parse(raw) };
+    return { ok: true, value: JSON.parse(text) };
   } catch {
-    const repaired = parseLooseKvObject(raw);
+    const repaired = parseLooseKvObject(text);
     if (repaired) return { ok: true, value: repaired };
     return { ok: false, value: null };
   }
 }
 
+function normalizeKvText(raw) {
+  return String(raw || '')
+    .replace(/^\uFEFF/, '')
+    .replace(/\u0000/g, '')
+    .trim();
+}
+
 function parseLooseKvObject(raw) {
-  const text = String(raw || '').trim();
+  const text = normalizeKvText(raw);
   if (!text.startsWith('{') || !text.endsWith('}')) return null;
 
   const body = text.slice(1, -1).trim();
