@@ -407,8 +407,39 @@ function parseJsonRecord(raw) {
   try {
     return { ok: true, value: JSON.parse(raw) };
   } catch {
+    const repaired = parseLooseKvObject(raw);
+    if (repaired) return { ok: true, value: repaired };
     return { ok: false, value: null };
   }
+}
+
+function parseLooseKvObject(raw) {
+  const text = String(raw || '').trim();
+  if (!text.startsWith('{') || !text.endsWith('}')) return null;
+
+  const body = text.slice(1, -1).trim();
+  if (!body) return {};
+
+  const data = {};
+  const parts = body.split(',');
+  for (const part of parts) {
+    const index = part.indexOf(':');
+    if (index <= 0) return null;
+
+    const key = part.slice(0, index).trim().replace(/^['"]|['"]$/g, '');
+    const value = part.slice(index + 1).trim();
+    if (!key) return null;
+
+    if (value === '[]') data[key] = [];
+    else if (value === '{}') data[key] = {};
+    else if (value === 'true') data[key] = true;
+    else if (value === 'false') data[key] = false;
+    else if (value === 'null') data[key] = null;
+    else if (/^-?\d+(\.\d+)?$/.test(value)) data[key] = Number(value);
+    else data[key] = value.replace(/^['"]|['"]$/g, '');
+  }
+
+  return data;
 }
 
 async function verifyPlisio(body, secret) {
